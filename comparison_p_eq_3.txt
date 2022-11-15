@@ -1,0 +1,260 @@
+function SST3(n,a,b)
+//{elliptic curve E:y^2=x^3+ax^2+b over F_3^n, 
+// return trace(E)}
+
+p:=3;N:=Ceiling(n/2)+5;
+Qp:=pAdicField(p,N);
+Qq<t>:=UnramifiedExtension(Qp,n);
+P<x,y>:=PolynomialRing(Qq,2);
+R<u>:=PolynomialRing(Qq);
+Zq<t>:=IntegerRing(Qq);
+Fq:=ResidueClassField(Zq);
+FFq<z>:=PolynomialRing(Fq);
+D:=(Zq!a*Zq!b)^(p^n);
+
+E:=EllipticCurve([0,a,0,0,b]);
+j:=jInvariant(E);
+
+//Lift j Invariant begin
+
+    function liftj_window(j,N,W)
+        Psi:=P!ClassicalModularPolynomial(p);
+        Dy:=Derivative(Psi,y);
+        j1:=Qq!j;
+        j0:=GaloisImage(j1,-1);
+        d:=ChangePrecision(Evaluate(Dy,[j0,j1])^(-1),1);
+        y1:=ChangePrecision(j1,W);
+        for i:=1 to W-1 do
+            x1:=ChangePrecision(GaloisImage(y1,-1),i+1);
+            y1:=ChangePrecision(y1,i+1)-(d*Evaluate(Psi,[x1,ChangePrecision(y1,i+1)]));
+        end for;
+        DX:=ChangePrecision(Evaluate(Derivative(Psi,x),[ChangePrecision(GaloisImage(y1,-1),W),y1]),W);
+        DY:=ChangePrecision(Evaluate(Dy,[ChangePrecision(GaloisImage(y1,-1),W),y1]),W);
+        for m:=1 to Ceiling(N/W) do
+            y1:=ChangePrecision(y1,(m+1)*W);
+            x1:=ChangePrecision(GaloisImage(y1,-1),(m+1)*W);
+            V:=Evaluate(Psi,[x1,y1]);
+            for i:=0 to W-1 do
+                if i+m*W ge N then break;end if;
+                dY:=ChangePrecision(d,W)*ChangePrecision(-V/p^(m*W),W);
+                dX:=ChangePrecision(GaloisImage(dY,-1),W);
+                y1:=y1+ChangePrecision(dY*p^(m*W),(m+1)*W);
+                V:=V+ChangePrecision((DX*dX+DY*dY)*p^(m*W),(m+1)*W);
+                //V:=Evaluate(Psi,[GaloisImage(y1,-1),y1]);V;
+            end for;
+        end for;
+        return ChangePrecision(y1,N);
+    end function;
+
+time j1:=liftj_window(j,N,Floor(Sqrt(N)));
+
+function Trace_SST()
+j2:=GaloisImage(j1,1);
+
+//Lift j invariant end
+
+
+//Lift B given A begin
+
+function LiftB(j,A,b,n)
+//{j and A must have preision n}
+
+if n eq 1 then B:=elt<Qq|b,1>;
+else
+    n1:=Ceiling(n/2);
+    B:=LiftB(ChangePrecision(j,n1),ChangePrecision(A,n1),b,n1);
+    B:=ChangePrecision(B,n);
+    B:=ChangePrecision(B,n)-ChangePrecision((j*(A^3*B+27/4*B^2)+64*A^6)/(j*A^3+27/2*j),n);
+end if;
+return B;
+
+end function;
+
+A1:=Zq!a;
+f1:=j1*(A1^3*u+27/4*u^2)+64*A1^6;
+B1:=HenselLift(f1,Qq!b,N);
+A2:=GaloisImage(A1,1);
+f2:=j2*(A2^3*u+27/4*u^2)+64*A2^6;
+B2:=HenselLift(f2,Qq!(b^p),N);
+
+//Lift B given A end
+
+//Lift H begin
+
+E2:=EllipticCurve([0,A2,0,0,B2]);
+Psi:=DivisionPolynomial(E2,p);
+x0:=ChangePrecision(Qq!(-b),2);
+h:=u-x0;
+
+function LiftH(Psi,h,n)
+
+if n eq 1 then H:=h;
+else
+    n1:=Ceiling(n/2);
+    H:=LiftH(Psi,h,n1);
+    temp_n:=2*n1+1;
+    H:=ChangePrecision(H,temp_n);
+    Psi_x:=ChangePrecision(Derivative(Psi)/p,temp_n);
+    H_x:=ChangePrecision(Derivative(H),temp_n);
+    gcd,i,j:=Xgcd(Psi_x,H);
+    i:=ChangePrecision(i,temp_n);
+    r0:=ChangePrecision((Psi mod H)/(p^(n1+1)),temp_n);
+    temp_H:=ChangePrecision(H,temp_n)+ChangePrecision((r0*H_x*i mod H)*p^n1,temp_n);
+    H:=ChangePrecision(temp_H,n);
+end if;
+return H;
+
+end function;
+
+H:=LiftH(Psi,h,N-3);
+X:=-Coefficient(H,0);
+
+//Lift H end
+
+
+gg:=A1^2*(-1890*X^3-1890*A2*X^2-252*A2^2*X+2*A2^3-729*B2)/((2*A1^3+27*B1)*(90*X^2+60*A2*X+A2^2));
+cc:=Norm(ChangePrecision(gg,N-3));
+t:=Integers()!Sqrt(cc);
+return t;
+end function;
+
+time t:=Trace_SST();
+return t;
+
+end function;
+
+
+
+
+
+function GMSST(n,a,b)
+    N:=Ceiling(n/2)+3;p:=3;
+    Qp:=pAdicField(p,N);
+    Qq<t>:=UnramifiedExtension(Qp,n);
+    P<x,y>:=PolynomialRing(Qq,2);
+    P1<w>:=PolynomialRing(Qq);
+    Zq<t>:=IntegerRing(Qq);
+    R<u>:=PolynomialRing(Zq);
+    Fq<t>:=ResidueClassField(Zq);
+    FFq<z>:=PolynomialRing(Fq);
+
+    e:=FFq!(z*(z-a)*(z-b));
+    E:=EllipticCurve(e);
+    j:=jInvariant(E);
+
+    function liftj_window(j,N,W)
+        Psi:=P!ClassicalModularPolynomial(p);
+        Dy:=Derivative(Psi,y);
+        j1:=Qq!j;
+        j0:=GaloisImage(j1,-1);
+        d:=ChangePrecision(Evaluate(Dy,[j0,j1])^(-1),1);
+        y1:=ChangePrecision(j1,W);
+        for i:=1 to W-1 do
+            x1:=ChangePrecision(GaloisImage(y1,-1),i+1);
+            y1:=ChangePrecision(y1,i+1)-(d*Evaluate(Psi,[x1,ChangePrecision(y1,i+1)]));
+        end for;
+        DX:=ChangePrecision(Evaluate(Derivative(Psi,x),[ChangePrecision(GaloisImage(y1,-1),W),y1]),W);
+        DY:=ChangePrecision(Evaluate(Dy,[ChangePrecision(GaloisImage(y1,-1),W),y1]),W);
+        for m:=1 to Ceiling(N/W) do
+            y1:=ChangePrecision(y1,(m+1)*W);
+            x1:=ChangePrecision(GaloisImage(y1,-1),(m+1)*W);
+            V:=Evaluate(Psi,[x1,y1]);
+            for i:=0 to W-1 do
+                if i+m*W ge N then break;end if;
+                dY:=ChangePrecision(d,W)*ChangePrecision(-V/p^(m*W),W);
+                dX:=ChangePrecision(GaloisImage(dY,-1),W);
+                y1:=y1+ChangePrecision(dY*p^(m*W),(m+1)*W);
+                V:=V+ChangePrecision((DX*dX+DY*dY)*p^(m*W),(m+1)*W);
+                //V:=Evaluate(Psi,[GaloisImage(y1,-1),y1]);V;
+            end for;
+        end for;
+        return ChangePrecision(y1,N);
+    end function;
+
+    time j:=liftj_window(j,N,Floor(Sqrt(N)));
+    
+    function Trace_GMSST(a,b)
+    a:=Zq!a;b:=Zq!b;
+
+    function newton(J,D,a,Nn)
+    if Nn eq 1 then return(elt<Qq|a,1>);
+        else N1:=Ceiling(Nn/2);
+               A:=newton(J,D,a,N1);
+               A:=ChangePrecision(A,Nn);
+               A:=ChangePrecision(A,Nn)-ChangePrecision((J*(A^2*D^2-2*D^3+D^4/A^2)-256*(A^2-D+D^2/A^2)^3)/(J*(2*A*D^2-2*D^4/A^3)-3*256*(2*A-2*D^2/A^3)*(A^2-D+D^2/A^2)^2),Nn);
+    end if;
+    return(A);
+    end function;   
+
+    ff:=Zq!j*D^2*u^2-256*(u+D^2)^3;
+    A:=HenselLift(ff,Zq!(a^4-a^3*b),N);
+    A:=HenselLift(u^4-u^2*D-A,Zq!a,N);
+    B:=D/A; 
+    //Evaluate(ff,A);
+
+    e1:=P1!(w*(w-A)*(w-B));
+    E1:=EllipticCurve(e1);
+    Phi1_p:=DivisionPolynomial(E1,p);
+    coe1:=Coefficients(Phi1_p);
+    coe2:=Reverse(coe1);
+    Phi2_p:=elt<P1|coe2>;
+    Phi2_p:=R!(Phi2_p/LeadingCoefficient(Phi2_p));
+
+function LiftH(Psi,h,n)
+
+if n eq 1 then H:=h;
+else
+    n1:=Ceiling(n/2);
+    H:=LiftH(Psi,h,n1);
+    temp_n:=2*n1+1;
+    H:=ChangePrecision(H,temp_n);
+    Psi_x:=ChangePrecision(Derivative(Psi),temp_n);
+    H_x:=ChangePrecision(Derivative(H),temp_n);
+    gcd,i,j:=Xgcd(Psi_x,H);
+    i:=ChangePrecision(i,temp_n);
+    r0:=ChangePrecision((Psi mod H)/(p^(n1)),temp_n);
+    temp_H:=ChangePrecision(H,temp_n)+ChangePrecision((r0*H_x*i mod H)*p^n1,temp_n);
+    H:=ChangePrecision(temp_H,n);
+end if;
+return H;
+
+end function;
+
+h:=w;
+V:=LiftH(Phi2_p,h,N);
+
+    //V:=HenselLift(Phi2_p,[FFq!(FFq!Phi2_p/(z^(Integers()!((p-1)/2)))),z^(Integers()!((p-1)/2))]);
+    //V:=V[2];
+    coe3:=Coefficients(V);
+    coe4:=Reverse(coe3);
+    v:=elt<P1|coe4>;
+    c:=LeadingCoefficient(v);
+    c1:=Qq!(p/c);
+    c:=Norm(c1);
+    t:=Integers()!(ChangePrecision(c,N-1));
+    return t;
+    end function;
+
+time t:=Trace_GMSST(a,b);
+return t;
+end function;
+
+
+
+
+
+
+
+p:=3;
+for n in [100,200,300] do
+Fq:=FiniteField(p^n);
+a:=Random(Fq);b:=Random(Fq);
+FFq<x>:=PolynomialRing(Fq);
+E:=EllipticCurve(x*(x-a)*(x-b));
+Coe:=Coefficients(SimplifiedModel(E));
+time SST3(n,Coe[2],Coe[5]);"and";
+time GMSST(n,a,b);"next";
+end for;
+
+
+
